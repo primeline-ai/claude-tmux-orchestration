@@ -91,9 +91,9 @@ COLLECT ──→ EVALUATE ──→ ACT ──→ LOG
 ### Setup
 
 ```bash
-# 1. Clone this Gist
-git clone https://gist.github.com/<GIST_ID>.git claude-tmux-orchestrator
-cd claude-tmux-orchestrator
+# 1. Clone this repo
+git clone https://github.com/primeline-ai/claude-tmux-orchestration.git
+cd claude-tmux-orchestration
 
 # 2. Copy files to your project
 cp -r _orchestrator/ /path/to/your/project/
