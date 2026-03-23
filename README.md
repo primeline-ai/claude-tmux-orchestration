@@ -282,11 +282,37 @@ The heartbeat adjusts its polling frequency based on worker state:
 | Normal | 120s | Active workers, regular updates |
 | Idle | 300s | No workers or all done |
 
+### Rate Limit Watchdog
+
+When running multiple workers, you **will** hit API rate limits. Without the watchdog, a rate-limited session stops and waits for user input. Worse: if you paste the error back, Claude interprets it as "the command is broken" and uses a workaround instead of retrying.
+
+The watchdog (`rate-limit-watchdog.sh`) solves this:
+
+1. **Monitors** all tmux panes every 15s for rate limit patterns (`429`, `Rate limit`, `overloaded`)
+2. **Waits** 65s for the rate limit to pass (API limits are typically 60s)
+3. **Detects** which command failed (e.g. `/commit`, `/whats-next`) from the pane output
+4. **Sends** an explicit retry message: *"This was a TEMPORARY rate limit, not a bug. Run the exact same command again — no workaround."*
+5. **Backs off** exponentially after repeated failures (up to 10 min cap)
+
+The watchdog starts automatically with `orch-bootstrap.sh` and stops on the `.stop` signal.
+
+```bash
+# Manual control
+./_orchestrator/rate-limit-watchdog.sh --status   # Check if running
+./_orchestrator/rate-limit-watchdog.sh --stop     # Kill it
+tail -f _orchestrator/watchdog.log                # Watch live
+
+# Disable in config.json
+{ "watchdog": { "enabled": false } }
+```
+
+**Why the retry message matters:** A simple "continue" causes Claude to skip the failed step or find creative alternatives. The watchdog's message explicitly says "NOT a bug, NO workaround, retry the EXACT command" — this is the key difference that makes it work.
+
 ---
 
 ## Configuration
 
-See [`config.json`](config.json) for all settings:
+See [`config.json`](_orchestrator/config.json) for all settings:
 
 | Key | Default | Purpose |
 |-----|---------|---------|
@@ -296,6 +322,11 @@ See [`config.json`](config.json) for all settings:
 | `thresholds.max_workers` | 6 | Maximum concurrent workers |
 | `thresholds.turns_for_tmux` | 25 | When to suggest tmux over sub-agents |
 | `rules.enforce_code_review_after_turns` | 30 | Auto-remind for code review |
+| `watchdog.enabled` | true | Auto-start watchdog with bootstrap |
+| `watchdog.check_interval` | 15 | How often to scan panes (seconds) |
+| `watchdog.cooldown_seconds` | 65 | Wait after rate limit before retry |
+| `watchdog.max_retries` | 5 | Consecutive retries before backoff |
+| `watchdog.backoff_multiplier` | 2 | Exponential backoff factor |
 
 ---
 

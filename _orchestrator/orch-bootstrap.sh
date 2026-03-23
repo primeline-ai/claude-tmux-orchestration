@@ -156,6 +156,40 @@ EOF
   fi
 }
 
+# --- Start Rate Limit Watchdog ---
+start_watchdog() {
+  local watchdog_script="${ORCH_DIR}/rate-limit-watchdog.sh"
+  if [[ ! -x "$watchdog_script" ]]; then
+    log_warn "rate-limit-watchdog.sh not found or not executable, skipping"
+    return
+  fi
+
+  # Check if disabled in config
+  local enabled
+  enabled=$(jq -r '.watchdog.enabled // true' "${ORCH_DIR}/config.json" 2>/dev/null)
+  if [[ "$enabled" == "false" ]]; then
+    log_info "Rate Limit Watchdog disabled in config.json"
+    return
+  fi
+
+  # Kill any existing watchdog
+  if [[ -f "${ORCH_DIR}/watchdog.pid" ]]; then
+    kill "$(cat "${ORCH_DIR}/watchdog.pid")" 2>/dev/null || true
+    rm -f "${ORCH_DIR}/watchdog.pid"
+    sleep 1
+  fi
+
+  export ORCH_DIR
+  nohup "$watchdog_script" >> "${ORCH_DIR}/watchdog.log" 2>&1 &
+  local wd_pid=$!
+  sleep 1
+  if kill -0 "$wd_pid" 2>/dev/null; then
+    log_info "Rate Limit Watchdog started (PID $wd_pid)"
+  else
+    log_warn "Watchdog failed to start (non-critical, continuing without it)"
+  fi
+}
+
 # --- Main ---
 main() {
   log_info "=== Claude Code tmux Orchestrator ==="
@@ -167,6 +201,7 @@ main() {
   ensure_session
   init_state
   start_heartbeat
+  start_watchdog
 
   echo ""
   log_info "=== Bootstrap complete ==="
@@ -175,6 +210,7 @@ main() {
   log_info "Workers: ./_orchestrator/spawn-worker.sh w1 sonnet \"Your task here\""
   log_info "Stop:    touch ${ORCH_DIR}/.stop"
   log_info "Log:     tail -f ${ORCH_DIR}/heartbeat.log"
+  log_info "Watchdog: tail -f ${ORCH_DIR}/watchdog.log"
 }
 
 main "$@"

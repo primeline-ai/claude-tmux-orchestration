@@ -22,5 +22,13 @@
     "max_age_days": 30,
     "auto_prune": true,
     "preserve_log_lines": 500
+  },
+
+  "watchdog": {
+    "enabled": true,
+    "check_interval": 15,
+    "cooldown_seconds": 65,
+    "max_retries": 5,
+    "backoff_multiplier": 2
   }
 }
